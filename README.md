@@ -1,4 +1,4 @@
-# RP2040_Cmake_Test
+# RP2040_Cmake_Test (Not ready at all for prime time, full of hard errors!)
 
 Minimal RP2040 + FreeRTOS + SEGGER Ozone Debug Template.
 
