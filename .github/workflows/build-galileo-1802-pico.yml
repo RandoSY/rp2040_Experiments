@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'galileo_1802_pico_source.part*'
+      - 'galileo_1802_pico/**'
       - '.github/workflows/build-galileo-1802-pico.yml'
   pull_request:
     paths:
-      - 'galileo_1802_pico_source.part*'
+      - 'galileo_1802_pico/**'
       - '.github/workflows/build-galileo-1802-pico.yml'
 
 jobs:
@@ -17,17 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unpack staged source
-        run: |
-          cat galileo_1802_pico_source.part00 galileo_1802_pico_source.part01 galileo_1802_pico_source.part02 galileo_1802_pico_source.part03 | base64 --decode | tar -xz
-
-      - name: Host core/MMIO tests
+      - name: Host core/MMIO/GY-271 tests
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror \
             -Igalileo_1802_pico \
             galileo_1802_pico/cdp1802.cpp \
             galileo_1802_pico/crc32.cpp \
             galileo_1802_pico/galileo_machine.cpp \
+            galileo_1802_pico/gy271_sensor.cpp \
             galileo_1802_pico/tests/test_core.cpp \
             -o /tmp/test_core
           /tmp/test_core
@@ -60,11 +57,10 @@ jobs:
 
       - name: Install pinned Arduino-Pico 6.0.0
         run: |
-          arduino-cli config init
-          arduino-cli config add board_manager.additional_urls \
+          arduino-cli core update-index --additional-urls \
             https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-          arduino-cli core update-index
-          arduino-cli core install rp2040:rp2040@6.0.0
+          arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
       - name: Compile generic Raspberry Pi Pico UF2
         run: |
