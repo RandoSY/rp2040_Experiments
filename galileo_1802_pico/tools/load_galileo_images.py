@@ -14,25 +14,47 @@ RAM_LEN=0x700
 ROM_CRC=0x779E96F2
 RAM_CRC=0xA06242CA
 
-LINE_RE=re.compile(r"^\s*([0-9A-Fa-f]+)\s+(.*)$")
-BYTE_RE=re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{1,2}(?![0-9A-Fa-f])")
+LINE_RE=re.compile(r"^\s*([0-9A-Fa-f]+)\s+(.+)$")
+BYTE_RE=re.compile(r"\b[0-9A-Fa-f]{1,2}\b")
 
-def parse_archive(path: str, expected_len: int, base_addr: int = 0) -> bytes:
-    out=bytearray(expected_len)
-    seen=[False]*expected_len
+def parse_archive(path: str, expected_len: int, base_addr: int, row_bytes: int) -> bytes:
+    """Parse the addressed rows exactly as the validated browser v8 parser does.
+
+    ROM rows contain 16 data bytes and RAM rows contain 8.  Only the first
+    row_bytes byte tokens after the address are data; Lisp punctuation or other
+    text outside those fixed-width rows is ignored.  Rows that do not contain
+    exactly row_bytes bytes are ignored.
+    """
+    pairs=[]
     with open(path,"r",encoding="utf-8",errors="replace") as f:
         for line in f:
             m=LINE_RE.match(line)
-            if not m: continue
-            addr=int(m.group(1),16) - base_addr
-            vals=[int(x,16) for x in BYTE_RE.findall(m.group(2))]
-            for i,v in enumerate(vals):
-                a=addr+i
-                if 0 <= a < expected_len:
-                    out[a]=v; seen[a]=True
+            if not m:
+                continue
+            addr=int(m.group(1),16)
+            vals=[int(x,16) for x in BYTE_RE.findall(m.group(2))[:row_bytes]]
+            if len(vals)==row_bytes:
+                pairs.append((addr,vals))
+    if not pairs:
+        raise ValueError(f"{path}: no archive image rows found")
+    lo=min(addr for addr,_ in pairs)
+    hi=max(addr+row_bytes for addr,_ in pairs)
+    if lo != base_addr:
+        raise ValueError(f"{path}: image starts at 0x{lo:04X}, expected 0x{base_addr:04X}")
+    if hi-base_addr != expected_len:
+        raise ValueError(f"{path}: parsed image length {hi-base_addr}, expected {expected_len}")
+    out=bytearray(expected_len)
+    seen=[False]*expected_len
+    for addr,vals in pairs:
+        off=addr-base_addr
+        if off < 0 or off+row_bytes > expected_len:
+            continue
+        out[off:off+row_bytes]=bytes(vals)
+        for i in range(off,off+row_bytes):
+            seen[i]=True
     missing=[i for i,x in enumerate(seen) if not x]
     if missing:
-        raise ValueError(f"{path}: missing {len(missing)} byte positions; first is 0x{missing[0]:04X}")
+        raise ValueError(f"{path}: missing {len(missing)} byte positions; first is 0x{missing[0]+base_addr:04X}")
     return bytes(out)
 
 def crc(data: bytes) -> int:
@@ -75,7 +97,8 @@ def main():
     ap.add_argument("--baud",type=int,default=115200,help="ignored by USB CDC but required by pyserial")
     args=ap.parse_args()
 
-    rom=parse_archive(args.rom,ROM_LEN,0x0000); ram=parse_archive(args.ram,RAM_LEN,0x4000)
+    rom=parse_archive(args.rom,ROM_LEN,0x0000,16)
+    ram=parse_archive(args.ram,RAM_LEN,0x4000,8)
     rc,mc=crc(rom),crc(ram)
     print(f"ROM: {len(rom)} bytes CRC32 {rc:08X}")
     print(f"RAM: {len(ram)} bytes CRC32 {mc:08X}")
