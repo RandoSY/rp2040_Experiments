@@ -27,12 +27,16 @@ It is derived conceptually from `wd5gnr/1802black` (RP2040/Arduino 1802 emulator
 
 ## Important image policy
 
-The historical Galileo image bytes are **not included** in this repository or the UF2. The loader accepts your local copies of `rom image` and `ram image` from the public `rongarret/gll-mag-patch` archive, verifies:
+The historical Galileo image bytes are **not included** in this repository or the UF2. The loader accepts your local copies of `rom image` and `ram image` from the public `rongarret/gll-mag-patch` archive, reconstructs the fixed-width addressed rows, and verifies:
 
-- ROM: 4096 bytes, CRC32 `779E96F2`
+- ROM: 4096 bytes, CRC32 `37376D80`
 - RAM initializer: 1792 bytes, CRC32 `A06242CA`
 
-and stores them in the Pico's flash filesystem. After that the Pico is standalone.
+These values were independently rechecked against the live public archive during GitHub CI. The ROM begins `71 00 C0 04 02 D3 4D B9 ...` and ends `A1 F8 06 AF A7 F8 0F BD F8 8D AD DF 00 00 00 00`.
+
+The earlier development value `779E96F2` for the ROM was incorrect and is intentionally not accepted by this release.
+
+The verified images are stored in the Pico's flash filesystem. After that the Pico is standalone.
 
 ## Build
 
@@ -59,7 +63,7 @@ After images are installed and verified:
 
 ```text
 GALILEO MAG / RP2040 CDP1802 emulator
-ROM CRC 779E96F2 OK
+ROM CRC 37376D80 OK
 RAM CRC A06242CA OK
 GALILEO flight image booted at $0000
 OK
@@ -92,7 +96,18 @@ Monitor commands:
 
 `.CMD C6 55` exercises the historical command path: command DMA fixture -> preserved `?COMND` -> preserved `CKCOMM` -> OUTBOARD MAG POWER ON.
 
-## Host validation
+## Validation
+
+GitHub CI performs all of the following before accepting a build:
+
+1. host CDP1802/MMIO/GY-271 tests;
+2. fresh download and checksum verification of the preserved archive images;
+3. preserved-flight boot/integration regression using those archive images;
+4. installation of pinned Arduino-Pico 6.0.0;
+5. real Raspberry Pi Pico UF2 cross-compilation;
+6. upload of the resulting UF2/ELF/BIN build artifacts.
+
+Host test command:
 
 ```bash
 g++ -std=c++17 -Wall -Wextra -Werror -I. \
@@ -101,9 +116,9 @@ g++ -std=c++17 -Wall -Wextra -Werror -I. \
 ./tests/test_core
 ```
 
-Current local core/MMIO/GY-271 result: **27 passed, 0 failed**.
+Current core/MMIO/GY-271 result: **27 passed, 0 failed**.
 
-The RP2040 C++ CPU core has also been differential-tested against the independently validated JavaScript v8 CDP1802 implementation across **6,144 generated one-instruction states (24 states × all 256 opcodes): 6,144/6,144 matched**.
+The RP2040 C++ CPU core has also been differential-tested against the independently validated JavaScript CDP1802 implementation across **6,144 generated one-instruction states (24 states × all 256 opcodes): 6,144/6,144 matched**.
 
 ## Provenance
 
