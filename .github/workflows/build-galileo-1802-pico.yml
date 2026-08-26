@@ -1,0 +1,82 @@
+name: Build Galileo 1802 Pico
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'galileo_1802_pico/**'
+      - '.github/workflows/build-galileo-1802-pico.yml'
+  pull_request:
+    paths:
+      - 'galileo_1802_pico/**'
+      - '.github/workflows/build-galileo-1802-pico.yml'
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host core/MMIO/GY-271 tests
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Igalileo_1802_pico \
+            galileo_1802_pico/cdp1802.cpp \
+            galileo_1802_pico/crc32.cpp \
+            galileo_1802_pico/galileo_machine.cpp \
+            galileo_1802_pico/gy271_sensor.cpp \
+            galileo_1802_pico/tests/test_core.cpp \
+            -o /tmp/test_core
+          /tmp/test_core
+
+      - name: Fetch preserved archive images for ephemeral regression only
+        run: |
+          mkdir -p /tmp/gll
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/rongarret/gll-mag-patch/master/rom%20image' \
+            -o '/tmp/gll/rom image'
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/rongarret/gll-mag-patch/master/ram%20image' \
+            -o '/tmp/gll/ram image'
+          python3 galileo_1802_pico/tools/extract_gll_images.py \
+            --rom '/tmp/gll/rom image' --ram '/tmp/gll/ram image' --out-dir /tmp/gll/bin
+
+      - name: Preserved-flight integration regression
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Igalileo_1802_pico \
+            galileo_1802_pico/cdp1802.cpp \
+            galileo_1802_pico/crc32.cpp \
+            galileo_1802_pico/galileo_machine.cpp \
+            galileo_1802_pico/galileo_flight.cpp \
+            galileo_1802_pico/tests/test_flight.cpp \
+            -o /tmp/test_flight
+          /tmp/test_flight /tmp/gll/bin/galileo_rom.bin /tmp/gll/bin/galileo_ram_init.bin
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install pinned Arduino-Pico 6.0.0
+        run: |
+          arduino-cli core update-index --additional-urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+
+      - name: Compile generic Raspberry Pi Pico UF2
+        run: |
+          mkdir -p build/galileo_1802_pico
+          arduino-cli compile \
+            --fqbn 'rp2040:rp2040:rpipico:flash=2097152_65536,usbstack=picosdk,opt=Optimize2' \
+            --warnings all \
+            --output-dir build/galileo_1802_pico \
+            galileo_1802_pico
+          find build/galileo_1802_pico -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: galileo-1802-pico-firmware
+          path: |
+            build/galileo_1802_pico/*.uf2
+            build/galileo_1802_pico/*.elf
+            build/galileo_1802_pico/*.bin
+          if-no-files-found: error
