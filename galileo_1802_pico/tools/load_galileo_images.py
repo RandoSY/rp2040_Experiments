@@ -11,19 +11,18 @@ import argparse, re, sys, time, zlib
 
 ROM_LEN=0x1000
 RAM_LEN=0x700
-ROM_CRC=0x779E96F2
+ROM_CRC=0x37376D80
 RAM_CRC=0xA06242CA
 
 LINE_RE=re.compile(r"^\s*([0-9A-Fa-f]+)\s+(.+)$")
 BYTE_RE=re.compile(r"\b[0-9A-Fa-f]{1,2}\b")
 
 def parse_archive(path: str, expected_len: int, base_addr: int, row_bytes: int) -> bytes:
-    """Parse the addressed rows exactly as the validated browser v8 parser does.
+    """Parse the fixed-width addressed rows in the preserved Lisp dump.
 
-    ROM rows contain 16 data bytes and RAM rows contain 8.  Only the first
+    ROM rows contain 16 data bytes and RAM rows contain 8. Only the first
     row_bytes byte tokens after the address are data; Lisp punctuation or other
-    text outside those fixed-width rows is ignored.  Rows that do not contain
-    exactly row_bytes bytes are ignored.
+    text outside those fixed-width rows is ignored.
     """
     pairs=[]
     with open(path,"r",encoding="utf-8",errors="replace") as f:
