@@ -6,6 +6,10 @@ on:
     paths:
       - 'galileo_1802_pico_source.part*'
       - '.github/workflows/build-galileo-1802-pico.yml'
+  pull_request:
+    paths:
+      - 'galileo_1802_pico_source.part*'
+      - '.github/workflows/build-galileo-1802-pico.yml'
 
 jobs:
   test-and-build:
