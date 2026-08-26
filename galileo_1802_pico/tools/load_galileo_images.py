@@ -17,14 +17,14 @@ RAM_CRC=0xA06242CA
 LINE_RE=re.compile(r"^\s*([0-9A-Fa-f]+)\s+(.*)$")
 BYTE_RE=re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{1,2}(?![0-9A-Fa-f])")
 
-def parse_archive(path: str, expected_len: int) -> bytes:
+def parse_archive(path: str, expected_len: int, base_addr: int = 0) -> bytes:
     out=bytearray(expected_len)
     seen=[False]*expected_len
     with open(path,"r",encoding="utf-8",errors="replace") as f:
         for line in f:
             m=LINE_RE.match(line)
             if not m: continue
-            addr=int(m.group(1),16)
+            addr=int(m.group(1),16) - base_addr
             vals=[int(x,16) for x in BYTE_RE.findall(m.group(2))]
             for i,v in enumerate(vals):
                 a=addr+i
@@ -75,7 +75,7 @@ def main():
     ap.add_argument("--baud",type=int,default=115200,help="ignored by USB CDC but required by pyserial")
     args=ap.parse_args()
 
-    rom=parse_archive(args.rom,ROM_LEN); ram=parse_archive(args.ram,RAM_LEN)
+    rom=parse_archive(args.rom,ROM_LEN,0x0000); ram=parse_archive(args.ram,RAM_LEN,0x4000)
     rc,mc=crc(rom),crc(ram)
     print(f"ROM: {len(rom)} bytes CRC32 {rc:08X}")
     print(f"RAM: {len(ram)} bytes CRC32 {mc:08X}")
