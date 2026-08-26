@@ -15,7 +15,8 @@ def main():
     ap.add_argument('--out-dir',required=True)
     args=ap.parse_args()
     out=pathlib.Path(args.out_dir); out.mkdir(parents=True,exist_ok=True)
-    rom=parse_archive(args.rom,ROM_LEN,0x0000); ram=parse_archive(args.ram,RAM_LEN,0x4000)
+    rom=parse_archive(args.rom,ROM_LEN,0x0000,16)
+    ram=parse_archive(args.ram,RAM_LEN,0x4000,8)
     rc=zlib.crc32(rom)&0xffffffff; mc=zlib.crc32(ram)&0xffffffff
     if rc!=ROM_CRC: raise SystemExit(f'ROM CRC mismatch {rc:08X} != {ROM_CRC:08X}')
     if mc!=RAM_CRC: raise SystemExit(f'RAM CRC mismatch {mc:08X} != {RAM_CRC:08X}')
