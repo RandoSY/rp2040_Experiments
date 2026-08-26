@@ -14,7 +14,8 @@ RAM_LEN=0x700
 ROM_CRC=0x779E96F2
 RAM_CRC=0xA06242CA
 
-LINE_RE=re.compile(r"^\s*([0-9A-Fa-f]+)\s+((?:[0-9A-Fa-f]{1,2}\s+)+)")
+LINE_RE=re.compile(r"^\s*([0-9A-Fa-f]+)\s+(.*)$")
+BYTE_RE=re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{1,2}(?![0-9A-Fa-f])")
 
 def parse_archive(path: str, expected_len: int) -> bytes:
     out=bytearray(expected_len)
@@ -24,7 +25,7 @@ def parse_archive(path: str, expected_len: int) -> bytes:
             m=LINE_RE.match(line)
             if not m: continue
             addr=int(m.group(1),16)
-            vals=[int(x,16) for x in m.group(2).split()]
+            vals=[int(x,16) for x in BYTE_RE.findall(m.group(2))]
             for i,v in enumerate(vals):
                 a=addr+i
                 if 0 <= a < expected_len:
