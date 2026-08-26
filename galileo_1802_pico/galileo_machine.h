@@ -9,7 +9,9 @@ public:
     static constexpr size_t RAM_SIZE = 0x1000;
     static constexpr size_t RAM_INIT_SIZE = 0x0700;
     static constexpr size_t SCRATCH_SIZE = 0x0400;
-    static constexpr uint32_t EXPECTED_ROM_CRC = 0x779E96F2u;
+    // CRCs of the byte streams reconstructed from the public preserved archive
+    // files (fixed-width addressed rows: ROM 16 bytes/row, RAM 8 bytes/row).
+    static constexpr uint32_t EXPECTED_ROM_CRC = 0x37376D80u;
     static constexpr uint32_t EXPECTED_RAM_CRC = 0xA06242CAu;
 
     uint8_t rom[ROM_SIZE]{};
