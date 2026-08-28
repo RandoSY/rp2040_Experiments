@@ -24,6 +24,7 @@ It is derived conceptually from `wd5gnr/1802black` (RP2040/Arduino 1802 emulator
 - USB CDC terminal
 - verified calls into selected preserved Galileo Forth words
 - flash-backed storage of the authentic ROM/RAM using LittleFS
+- machine-readable CDP1802 state/step protocol for hardware-in-the-loop validation
 
 ## Important image policy
 
@@ -96,16 +97,50 @@ Monitor commands:
 
 `.CMD C6 55` exercises the historical command path: command DMA fixture -> preserved `?COMND` -> preserved `CKCOMM` -> OUTBOARD MAG POWER ON.
 
+### Machine-readable 1802 debug interface
+
+The normal Forth/monitor console remains intact. For deterministic browser, Python, or regression use, commands whose first token begins with an `@` command name access a separate CDP1802 debug protocol:
+
+```text
+@HELP
+@STATE
+@STEP
+@RESET
+@IRQ
+@SETPC 4200
+@SET D 55
+@EF 1 1
+@PEEK 4200 10
+@POKE 4200 F8 55 7B 7A 00
+```
+
+Replies begin with `@1802`. `@STATE` reports R0-RF plus D, DF, P, X, T, IE, Q, EF1-EF4, PC, IDL/HALT/pending-interrupt state, undefined-opcode trap, instruction count, and machine-cycle count in a stable ASCII record.
+
+The existing Forth `@` fetch word is preserved: a line containing `@` as a Forth token is not treated as a debug command.
+
+See `CDP1802_DEBUG_PROTOCOL.md` for the protocol contract and differential-test sequence. A Python client is provided in `tools/rp2040_1802_debug.py`:
+
+```bash
+python3 tools/rp2040_1802_debug.py --self-test
+python3 tools/rp2040_1802_debug.py --port COM7
+python3 tools/rp2040_1802_debug.py --port COM7 --step
+python3 tools/rp2040_1802_debug.py --port COM7 --smoke
+```
+
+The hardware smoke test is deliberately reversible: it saves a few bytes in Galileo RAM at `$4200`, installs `LDI 55; SEQ; REQ; IDL`, verifies the expected D/Q/PC/IDL state after each step, restores the original RAM bytes, and finally returns through the normal Galileo reset path.
+
 ## Validation
 
 GitHub CI performs all of the following before accepting a build:
 
 1. host CDP1802/MMIO/GY-271 tests;
-2. fresh download and checksum verification of the preserved archive images;
-3. preserved-flight boot/integration regression using those archive images;
-4. installation of pinned Arduino-Pico 6.0.0;
-5. real Raspberry Pi Pico UF2 cross-compilation;
-6. upload of the resulting UF2/ELF/BIN build artifacts.
+2. dedicated CDP1802 ISA/state regression tests;
+3. debug-protocol parser self-test;
+4. fresh download and checksum verification of the preserved archive images;
+5. preserved-flight boot/integration regression using those archive images;
+6. installation of pinned Arduino-Pico 6.0.0;
+7. real Raspberry Pi Pico UF2 cross-compilation;
+8. upload of the resulting UF2/ELF/BIN build artifacts.
 
 Host test command:
 
@@ -119,6 +154,8 @@ g++ -std=c++17 -Wall -Wextra -Werror -I. \
 Current core/MMIO/GY-271 result: **27 passed, 0 failed**.
 
 The RP2040 C++ CPU core has also been differential-tested against the independently validated JavaScript CDP1802 implementation across **6,144 generated one-instruction states (24 states × all 256 opcodes): 6,144/6,144 matched**.
+
+The additional `tests/test_1802_regression.cpp` suite is intended as a readable permanent guardrail around the instruction families and state semantics most likely to regress: register access, load/store/indexing, arithmetic/carry/borrow, shifts, short/long branches, Q/EF, INP/OUT, interrupts, undefined-opcode trapping, cycle bookkeeping, and state snapshot/restore.
 
 ## Provenance
 
