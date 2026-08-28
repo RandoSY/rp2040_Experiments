@@ -97,23 +97,32 @@ static bool setNamedState(CDP1802 &cpu, const char *name, uint32_t value) {
         if (n < 0 || value > 0xffffu) return false;
         s.R[n] = (uint16_t)value;
     } else if (ieq(name, "D")) {
-        if (value > 0xffu) return false; s.D = (uint8_t)value;
+        if (value > 0xffu) return false;
+        s.D = (uint8_t)value;
     } else if (ieq(name, "DF")) {
-        if (value > 1u) return false; s.DF = (uint8_t)value;
+        if (value > 1u) return false;
+        s.DF = (uint8_t)value;
     } else if (ieq(name, "P")) {
-        if (value > 0x0fu) return false; s.P = (uint8_t)value;
+        if (value > 0x0fu) return false;
+        s.P = (uint8_t)value;
     } else if (ieq(name, "X")) {
-        if (value > 0x0fu) return false; s.X = (uint8_t)value;
+        if (value > 0x0fu) return false;
+        s.X = (uint8_t)value;
     } else if (ieq(name, "T")) {
-        if (value > 0xffu) return false; s.T = (uint8_t)value;
+        if (value > 0xffu) return false;
+        s.T = (uint8_t)value;
     } else if (ieq(name, "IE")) {
-        if (value > 1u) return false; s.IE = (uint8_t)value;
+        if (value > 1u) return false;
+        s.IE = (uint8_t)value;
     } else if (ieq(name, "Q")) {
-        if (value > 1u) return false; s.Q = (uint8_t)value;
+        if (value > 1u) return false;
+        s.Q = (uint8_t)value;
     } else if (ieq(name, "IDL")) {
-        if (value > 1u) return false; s.idle = value != 0;
+        if (value > 1u) return false;
+        s.idle = value != 0;
     } else if (ieq(name, "HALT")) {
-        if (value > 1u) return false; s.halted = value != 0;
+        if (value > 1u) return false;
+        s.halted = value != 0;
     } else {
         return false;
     }
@@ -179,7 +188,10 @@ bool handleCdp1802MonitorCommand(Stream &io, CDP1802 &cpu, CDP1802Bus &bus, char
     if (ieq(cmd, "@SETPC")) {
         char *a = strtok(nullptr, " \t");
         uint32_t v = 0;
-        if (!parseHex(a, 0xffffu, v)) { error(io, "SETPC expects hex16"); return true; }
+        if (!parseHex(a, 0xffffu, v)) {
+            error(io, "SETPC expects hex16");
+            return true;
+        }
         cpu.setPC((uint16_t)v);
         io.print("@1802 OK SETPC="); hex4(io, (uint16_t)v); io.println();
         printState(io, cpu);
@@ -230,16 +242,34 @@ bool handleCdp1802MonitorCommand(Stream &io, CDP1802 &cpu, CDP1802Bus &bus, char
     if (ieq(cmd, "@POKE")) {
         char *as = strtok(nullptr, " \t");
         uint32_t a = 0;
-        if (!parseHex(as, 0xffffu, a)) { error(io, "POKE expects hex16 byte_hex ..."); return true; }
+        if (!parseHex(as, 0xffffu, a)) {
+            error(io, "POKE expects hex16 byte_hex ...");
+            return true;
+        }
+
+        uint8_t bytes[0x40]{};
         unsigned count = 0;
         for (char *bs = strtok(nullptr, " \t"); bs; bs = strtok(nullptr, " \t")) {
-            if (count >= 0x40u) { error(io, "POKE maximum is 40 hex bytes"); return true; }
+            if (count >= sizeof(bytes)) {
+                error(io, "POKE maximum is 40 hex bytes");
+                return true;
+            }
             uint32_t b = 0;
-            if (!parseHex(bs, 0xffu, b)) { error(io, "POKE contains invalid byte"); return true; }
-            bus.write((uint16_t)(a + count), (uint8_t)b);
-            count++;
+            if (!parseHex(bs, 0xffu, b)) {
+                error(io, "POKE contains invalid byte; no bytes written");
+                return true;
+            }
+            bytes[count++] = (uint8_t)b;
         }
-        if (!count) { error(io, "POKE requires at least one byte"); return true; }
+        if (!count) {
+            error(io, "POKE requires at least one byte");
+            return true;
+        }
+
+        // Commit only after the whole request has validated, avoiding partial
+        // writes when a later token is malformed.
+        for (unsigned i = 0; i < count; i++) bus.write((uint16_t)(a + i), bytes[i]);
+
         io.print("@1802 OK POKE ADDR="); hex4(io, (uint16_t)a); io.print(" COUNT="); hex2(io, (uint8_t)count); io.println();
         return true;
     }
