@@ -1,0 +1,80 @@
+name: Build COSMAC 1802 microFORTH Pico
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'cosmac_1802_microforth_pico/**'
+      - 'galileo_1802_pico/cdp1802.cpp'
+      - 'galileo_1802_pico/cdp1802.h'
+      - '.github/workflows/build-cosmac-1802-microforth-pico.yml'
+  pull_request:
+    paths:
+      - 'cosmac_1802_microforth_pico/**'
+      - 'galileo_1802_pico/cdp1802.cpp'
+      - 'galileo_1802_pico/cdp1802.h'
+      - '.github/workflows/build-cosmac-1802-microforth-pico.yml'
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: CDP1802 ISA regression
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Igalileo_1802_pico \
+            galileo_1802_pico/cdp1802.cpp \
+            galileo_1802_pico/tests/test_1802_regression.cpp \
+            -o /tmp/test_1802_regression
+          /tmp/test_1802_regression
+
+      - name: Validate native kernel image
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          p=pathlib.Path('cosmac_1802_microforth_pico/native_kernel_v2.h').read_text()
+          m=re.search(r'MF_KERNEL_HEX\[\]="([0-9A-F]+)"',p)
+          assert m, 'kernel hex string missing'
+          data=bytes.fromhex(m.group(1))
+          assert len(data)==711, len(data)
+          assert data[0]==0xD3
+          print('native kernel:',len(data),'bytes')
+          PY
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install pinned Arduino-Pico 6.0.0
+        run: |
+          arduino-cli core update-index --additional-urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls \
+            https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+
+      - name: Stage generic CDP1802 core
+        run: |
+          cp galileo_1802_pico/cdp1802.cpp cosmac_1802_microforth_pico/cdp1802.cpp
+          cp galileo_1802_pico/cdp1802.h cosmac_1802_microforth_pico/cdp1802.h
+
+      - name: Compile stand-alone microFORTH Pico UF2
+        run: |
+          mkdir -p build/cosmac_1802_microforth_pico
+          arduino-cli compile \
+            --fqbn 'rp2040:rp2040:rpipico:flash=2097152_65536,usbstack=picosdk,opt=Optimize2' \
+            --warnings all \
+            --output-dir build/cosmac_1802_microforth_pico \
+            cosmac_1802_microforth_pico
+          UF2="$(find build/cosmac_1802_microforth_pico -maxdepth 1 -name '*.uf2' | head -1)"
+          test -n "$UF2"
+          cp "$UF2" build/cosmac_1802_microforth_pico/COSMAC_1802_MICROFORTH_PICO.uf2
+          find build/cosmac_1802_microforth_pico -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cosmac-1802-microforth-pico-firmware
+          path: |
+            build/cosmac_1802_microforth_pico/COSMAC_1802_MICROFORTH_PICO.uf2
+            build/cosmac_1802_microforth_pico/*.elf
+            build/cosmac_1802_microforth_pico/*.bin
+          if-no-files-found: error
