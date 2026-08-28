@@ -161,36 +161,39 @@ def print_state(state: CpuState) -> None:
 
 
 def smoke_test(mon: Monitor) -> None:
-    """Run a tiny reversible program in Galileo RAM, then restore the bytes."""
-    address = 0x4200
+    """Run a tiny reversible program in unprotected Galileo scratch space."""
+    # $6000-$63FF is the emulator's scratch-memory window. Unlike physical
+    # Galileo RAM pages it is not affected by the bank-swap or page-protection
+    # controls, so it is a deterministic location for a reversible HIL test.
+    address = 0x63F0
     program = bytes([0xF8, 0x55, 0x7B, 0x7A, 0x00])  # LDI 55; SEQ; REQ; IDL
     original = mon.peek(address, len(program))
     wrote_test_program = False
     try:
-        lines = mon.send("@POKE 4200 " + " ".join(f"{b:02X}" for b in program))
+        lines = mon.send(f"@POKE {address:04X} " + " ".join(f"{b:02X}" for b in program))
         if any(line.startswith("@1802 ERR ") for line in lines):
             raise RuntimeError("POKE failed: " + " | ".join(lines))
         wrote_test_program = True
         if mon.peek(address, len(program)) != program:
-            raise RuntimeError("RAM readback did not match test program")
+            raise RuntimeError("scratch-memory readback did not match test program")
 
         mon.send("@RESET", wait_for_state=True)
         mon.send(f"@SETPC {address:04X}", wait_for_state=True)
 
         s1 = mon.step()
-        assert s1["D"] == 0x55 and s1["PC"] == 0x4202
+        assert s1["D"] == 0x55 and s1["PC"] == address + 2
         s2 = mon.step()
-        assert s2["Q"] == 1 and s2["PC"] == 0x4203
+        assert s2["Q"] == 1 and s2["PC"] == address + 3
         s3 = mon.step()
-        assert s3["Q"] == 0 and s3["PC"] == 0x4204
+        assert s3["Q"] == 0 and s3["PC"] == address + 4
         s4 = mon.step()
-        assert s4["IDL"] == 1 and s4["PC"] == 0x4205
+        assert s4["IDL"] == 1 and s4["PC"] == address + 5
         print("RP2040 CDP1802 hardware smoke test: PASS")
     finally:
         if wrote_test_program:
-            restore = mon.send("@POKE 4200 " + " ".join(f"{b:02X}" for b in original))
+            restore = mon.send(f"@POKE {address:04X} " + " ".join(f"{b:02X}" for b in original))
             if any(line.startswith("@1802 ERR ") for line in restore):
-                print("WARNING: could not restore RAM smoke-test bytes", file=sys.stderr)
+                print("WARNING: could not restore scratch-memory smoke-test bytes", file=sys.stderr)
         # Restore the normal Galileo boot path when images are installed.
         mon.send(".RESET")
 
@@ -201,7 +204,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--port", help="serial port, e.g. COM7 or /dev/ttyACM0")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--step", action="store_true", help="single-step and print state")
-    ap.add_argument("--smoke", action="store_true", help="run reversible RAM hardware smoke test")
+    ap.add_argument("--smoke", action="store_true", help="run reversible scratch-memory hardware smoke test")
     ap.add_argument("--command", help="send one raw line and print replies")
     args = ap.parse_args(argv)
 
