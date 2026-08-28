@@ -1,0 +1,2 @@
+#pragma once
+static const char MF_SEG3_HEX[]="F867B7F8F0A746320F57E767273006DC";
