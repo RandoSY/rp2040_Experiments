@@ -39,10 +39,6 @@ static void load(TestBus &b, uint16_t address, std::initializer_list<uint8_t> by
     for (uint8_t v : bytes) b.m[address++] = v;
 }
 
-static void stepN(CDP1802 &c, unsigned n) {
-    while (n--) c.step();
-}
-
 static void test_reset_and_state_visibility() {
     TestBus b; CDP1802 c(b);
     c.R[3] = 0x3344;
@@ -102,7 +98,14 @@ static void test_register_families() {
 
     for (unsigned n = 0; n < 16; n++) {
         c.hardReset();
+        // Keep the program counter in a different register from the register
+        // under test. R0 is the PC after reset, so testing R0 directly without
+        // this isolation would move the instruction fetch itself.
+        const unsigned pcReg = (n == 15) ? 14 : 15;
+        c.P = (uint8_t)pcReg;
+        c.R[pcReg] = 0;
         c.R[n] = (uint16_t)(0x1200u | n);
+
         b.m[0] = (uint8_t)(0x10u | n); // INC
         c.step();
         CHECK(c.R[n] == (uint16_t)(0x1201u | n), "INC Rn");
