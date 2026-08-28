@@ -67,10 +67,22 @@ jobs:
           arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls \
             https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
-      - name: Stage generic CDP1802 core
+      - name: Stage clean firmware sketch
         run: |
-          cp galileo_1802_pico/cdp1802.cpp cosmac_1802_native_terminal_pico/cdp1802.cpp
-          cp galileo_1802_pico/cdp1802.h cosmac_1802_native_terminal_pico/cdp1802.h
+          rm -rf /tmp/cosmac_1802_native_terminal_pico_v9_fixed
+          mkdir -p /tmp/cosmac_1802_native_terminal_pico_v9_fixed
+          cp cosmac_1802_native_terminal_pico/cosmac_1802_native_terminal_pico.ino \
+            /tmp/cosmac_1802_native_terminal_pico_v9_fixed/cosmac_1802_native_terminal_pico_v9_fixed.ino
+          cp cosmac_1802_native_terminal_pico/native_rom_v9_segments.h \
+            /tmp/cosmac_1802_native_terminal_pico_v9_fixed/native_rom_v9_segments.h
+          cp galileo_1802_pico/cdp1802.cpp /tmp/cosmac_1802_native_terminal_pico_v9_fixed/cdp1802.cpp
+          cp galileo_1802_pico/cdp1802.h /tmp/cosmac_1802_native_terminal_pico_v9_fixed/cdp1802.h
+          sed -i 's/native_rom_v8_segments.h/native_rom_v9_segments.h/' \
+            /tmp/cosmac_1802_native_terminal_pico_v9_fixed/cosmac_1802_native_terminal_pico_v9_fixed.ino
+          sed -i 's/COSMAC1802 NATIVE FORTH V8 READY/COSMAC1802 NATIVE FORTH V9 READY/' \
+            /tmp/cosmac_1802_native_terminal_pico_v9_fixed/cosmac_1802_native_terminal_pico_v9_fixed.ino
+          grep -q 'native_rom_v9_segments.h' /tmp/cosmac_1802_native_terminal_pico_v9_fixed/cosmac_1802_native_terminal_pico_v9_fixed.ino
+          test ! -e /tmp/cosmac_1802_native_terminal_pico_v9_fixed/test_native_terminal_v9.cpp
 
       - name: Compile audited native-terminal Pico UF2
         run: |
@@ -79,17 +91,30 @@ jobs:
             --fqbn 'rp2040:rp2040:rpipico:flash=2097152_65536,usbstack=picosdk,opt=Optimize2' \
             --warnings all \
             --output-dir build/cosmac_1802_native_terminal_pico \
-            cosmac_1802_native_terminal_pico
+            /tmp/cosmac_1802_native_terminal_pico_v9_fixed
           UF2="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.uf2' | head -1)"
+          ELF="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.elf' | head -1)"
           test -n "$UF2"
-          cp "$UF2" build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_AUDITED.uf2
+          test -n "$ELF"
+          cp "$UF2" build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_USB_FIXED.uf2
           find build/cosmac_1802_native_terminal_pico -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - name: Verify firmware image is the sketch, not the host regression executable
+        run: |
+          ELF="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.elf' | head -1)"
+          strings "$ELF" | grep -q 'COSMAC1802 NATIVE FORTH V9 READY'
+          strings "$ELF" | grep -q 'Pico Serial'
+          if strings "$ELF" | grep -q 'native terminal v9 regression: PASS'; then
+            echo 'ERROR: host regression main leaked into Pico firmware'
+            exit 1
+          fi
+          echo 'Firmware entry/USB string audit: PASS'
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cosmac-1802-native-microforth-v9-audited
+          name: cosmac-1802-native-microforth-v9-usb-fixed
           path: |
-            build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_AUDITED.uf2
+            build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_USB_FIXED.uf2
             build/cosmac_1802_native_terminal_pico/*.elf
             build/cosmac_1802_native_terminal_pico/*.bin
           if-no-files-found: error
