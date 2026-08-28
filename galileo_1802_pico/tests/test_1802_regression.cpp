@@ -48,34 +48,39 @@ static void test_register_families() {
 
     for (unsigned n = 0; n < 16; n++) {
         c.hardReset();
-        c.R[n] = (uint16_t)(0x1200u | n);
+        const unsigned p = (n == 0) ? 1 : 0; // Keep the program counter in a different R register.
+        const uint16_t initial = (uint16_t)(0x1200u + n);
+        c.P = (uint8_t)p;
+        c.R[p] = 0;
+        c.R[n] = initial;
+
         b.m[0] = (uint8_t)(0x10u | n); // INC
         c.step();
-        CHECK(c.R[n] == (uint16_t)(0x1201u | n), "INC Rn");
+        CHECK(c.R[n] == (uint16_t)(initial + 1), "INC Rn");
 
-        c.setPC(0);
+        c.R[p] = 0;
         b.m[0] = (uint8_t)(0x20u | n); // DEC
         c.step();
-        CHECK(c.R[n] == (uint16_t)(0x1200u | n), "DEC Rn");
+        CHECK(c.R[n] == initial, "DEC Rn");
 
-        c.setPC(0);
+        c.R[p] = 0;
         b.m[0] = (uint8_t)(0x80u | n); // GLO
         c.step();
         CHECK(c.D == (uint8_t)n, "GLO Rn");
 
-        c.setPC(0);
+        c.R[p] = 0;
         b.m[0] = (uint8_t)(0x90u | n); // GHI
         c.step();
         CHECK(c.D == 0x12, "GHI Rn");
 
         c.D = 0xA5;
-        c.setPC(0);
+        c.R[p] = 0;
         b.m[0] = (uint8_t)(0xA0u | n); // PLO
         c.step();
         CHECK((c.R[n] & 0x00ffu) == 0xA5, "PLO Rn");
 
         c.D = 0x5A;
-        c.setPC(0);
+        c.R[p] = 0;
         b.m[0] = (uint8_t)(0xB0u | n); // PHI
         c.step();
         CHECK((c.R[n] >> 8) == 0x5A, "PHI Rn");
@@ -184,14 +189,12 @@ static void test_shifts() {
 static void test_short_branches() {
     TestBus b; CDP1802 c(b);
 
-    // Q branch taken.
     load(b, 0, {0x7B, 0x31,0x08, 0xF8,0x11, 0x30,0x0A, 0x00, 0xF8,0x22});
     c.step(); c.step();
     CHECK(c.pc() == 0x0008, "BQ taken when Q=1");
     c.step();
     CHECK(c.D == 0x22, "BQ target executes");
 
-    // EF1 true and false forms.
     c.hardReset(); c.setEF(1, true);
     load(b, 0, {0x34,0x05, 0xF8,0x11, 0x00, 0xF8,0x33});
     c.step();
@@ -204,7 +207,6 @@ static void test_short_branches() {
     c.step();
     CHECK(c.pc() == 0x0005, "BN1 taken for deasserted EF1");
 
-    // Page-boundary case: branch opcode at $00FF, operand at $0100.
     c.hardReset(); c.setPC(0x00FF);
     b.m[0x00FF] = 0x30; b.m[0x0100] = 0x42;
     c.step();
@@ -214,19 +216,19 @@ static void test_short_branches() {
 static void test_long_branches_and_skips() {
     TestBus b; CDP1802 c(b);
 
-    load(b, 0, {0xF8,0x00, 0xC2,0x12,0x34}); // LBZ
+    load(b, 0, {0xF8,0x00, 0xC2,0x12,0x34});
     c.step(); c.step();
     CHECK(c.pc() == 0x1234, "LBZ long branch taken");
 
     c.hardReset(); c.IE = 1;
-    load(b, 0, {0xCC,0xAA,0xBB, 0xF8,0x42}); // LSIE
+    load(b, 0, {0xCC,0xAA,0xBB, 0xF8,0x42});
     c.step();
     CHECK(c.pc() == 3, "LSIE skips two bytes");
     c.step();
     CHECK(c.D == 0x42, "LSIE lands after skipped bytes");
 
     c.hardReset(); c.Q = 0;
-    load(b, 0, {0xC5,0xAA,0xBB, 0xF8,0x66}); // LSNQ
+    load(b, 0, {0xC5,0xAA,0xBB, 0xF8,0x66});
     c.step();
     CHECK(c.pc() == 3, "LSNQ condition");
 }
@@ -234,12 +236,12 @@ static void test_long_branches_and_skips() {
 static void test_io_q_and_undefined() {
     TestBus b; CDP1802 c(b);
 
-    c.X = 2; c.R[2] = 0x1000; b.m[0x1000] = 0xA5; b.m[0] = 0x61; // OUT 1
+    c.X = 2; c.R[2] = 0x1000; b.m[0x1000] = 0xA5; b.m[0] = 0x61;
     c.step();
     CHECK(b.outCount == 1 && b.lastOutPort == 1 && b.lastOutValue == 0xA5, "OUT sends M(RX) to port");
     CHECK(c.R[2] == 0x1001, "OUT advances R(X)");
 
-    c.hardReset(); c.X = 2; c.R[2] = 0x1100; b.in[1] = 0x5A; b.m[0] = 0x69; // INP 1
+    c.hardReset(); c.X = 2; c.R[2] = 0x1100; b.in[1] = 0x5A; b.m[0] = 0x69;
     c.step();
     CHECK(c.D == 0x5A && b.m[0x1100] == 0x5A, "INP copies port to D and M(RX)");
     CHECK(c.R[2] == 0x1100, "INP leaves R(X) unchanged");
