@@ -5,10 +5,11 @@ This protocol is an additive debug/validation interface for the RP2040 Galileo C
 ## Design rules
 
 - One ASCII command per line, terminated by LF.
-- Debug commands begin with `@`.
+- Debug commands begin with an `@` command name such as `@STATE` or `@STEP`.
+- The existing Forth `@` fetch word remains available; `@` by itself (or followed by whitespace) is routed to Forth, not this debug protocol.
 - Numeric CPU and memory values are hexadecimal unless stated otherwise.
 - Replies begin with `@1802` so a host can separate protocol traffic from human-oriented console output.
-- Sending an `@` command from the sketch pauses normal flight execution before the command is executed. This makes snapshots and single-step results deterministic.
+- Sending an `@` debug command from the sketch pauses normal flight execution before the command is executed. This makes snapshots and single-step results deterministic.
 - Protocol version: `1`.
 
 ## Commands
@@ -24,8 +25,8 @@ This protocol is an additive debug/validation interface for the RP2040 Galileo C
 | `@SET R3 1234` | Set one 16-bit register |
 | `@SET D 55` | Set D; similarly DF, P, X, T, IE, Q, IDL, HALT |
 | `@EF 1 1` | Assert/deassert EF1..EF4 |
-| `@PEEK 0200 10` | Read up to `0x40` bytes; count is hexadecimal |
-| `@POKE 0200 F8 55 7B 00` | Write up to `0x40` bytes through the machine bus |
+| `@PEEK 4200 10` | Read up to `0x40` bytes; count is hexadecimal |
+| `@POKE 4200 F8 55 7B 00` | Write up to `0x40` bytes through the machine bus |
 
 ## State record
 
@@ -45,8 +46,8 @@ A host can use the RP2040 as one side of a cross-implementation comparison:
 
 ```text
 @RESET
-@POKE 0200 F8 55 7B 7A 00
-@SETPC 0200
+@POKE 4200 F8 55 7B 7A 00
+@SETPC 4200
 @STATE
 @STEP
 @STEP
@@ -55,6 +56,10 @@ A host can use the RP2040 as one side of a cross-implementation comparison:
 
 The host runs the same bytes and initial state in the JavaScript/reference 1802 model and compares the `@1802 STATE` fields after each step. A mismatch can therefore identify the exact instruction and exact state field that diverged.
 
-## Important scope note
+The supplied `tools/rp2040_1802_debug.py` understands these records and includes a parser self-test plus a reversible physical-Pico smoke test.
+
+## Important scope notes
 
 `@PEEK` and `@POKE` access memory through the existing `CDP1802Bus`/`GalileoMachine` mapping. They therefore preserve Galileo MMIO, bank-switching, and write-protection behavior rather than bypassing the machine model. This is deliberate: CPU-only regression can use ordinary RAM addresses, while Galileo integration tests continue to see realistic machine behavior.
+
+`@POKE` validates all requested bytes before performing any write. A malformed request therefore cannot leave a partially written test program behind.
