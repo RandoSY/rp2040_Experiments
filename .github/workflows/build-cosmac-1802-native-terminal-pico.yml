@@ -30,23 +30,33 @@ jobs:
             -o /tmp/test_1802_regression
           /tmp/test_1802_regression
 
-      - name: Validate native ROM segment image
+      - name: Validate audited v9 ROM image
         run: |
           python3 - <<'PY'
-          import re, pathlib
-          p=pathlib.Path('cosmac_1802_native_terminal_pico/native_rom_v8_segments.h').read_text()
-          segs={int(n):bytes.fromhex(''.join(parts)) for n,body in re.findall(r'MF_SEG(\d+)_HEX\[\]\s*=\s*(.*?);',p,re.S) for parts in [[x for x in re.findall(r'"([0-9A-F]+)"',body)]]}
-          rows=re.findall(r'\{0x([0-9A-F]{4}),\s*(\d+),\s*MF_SEG(\d+)_HEX\}',p)
-          assert len(rows)==11, len(rows)
+          import pathlib,re
+          root=pathlib.Path('cosmac_1802_native_terminal_pico')
+          lengths=[25,1106,592,16,33,104,86,158,28,129,700,34,124]
           total=0
-          for addr,n,idx in rows:
-              data=segs[int(idx)]
-              assert len(data)==int(n),(idx,len(data),n)
+          for i,n in enumerate(lengths):
+              t=(root/f'v9_seg{i}.h').read_text()
+              m=re.search(r'="([0-9A-F]+)";',t)
+              assert m, i
+              data=bytes.fromhex(m.group(1))
+              assert len(data)==n,(i,len(data),n)
               total+=len(data)
-          assert total==2524,total
-          assert segs[0][:4]==bytes.fromhex('F8C8BCF8')
-          print('native ROM occupied bytes:',total)
+          assert total==3135,total
+          assert bytes.fromhex(re.search(r'="([0-9A-F]+)";', (root/'v9_seg0.h').read_text()).group(1))[:4]==bytes.fromhex('F8C8BCF8')
+          print('audited v9 ROM occupied bytes:',total)
           PY
+
+      - name: Native microFORTH v9 regression
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Igalileo_1802_pico -Icosmac_1802_native_terminal_pico \
+            galileo_1802_pico/cdp1802.cpp \
+            cosmac_1802_native_terminal_pico/test_native_terminal_v9.cpp \
+            -o /tmp/test_native_terminal_v9
+          /tmp/test_native_terminal_v9
 
       - uses: arduino/setup-arduino-cli@v2
 
@@ -62,7 +72,7 @@ jobs:
           cp galileo_1802_pico/cdp1802.cpp cosmac_1802_native_terminal_pico/cdp1802.cpp
           cp galileo_1802_pico/cdp1802.h cosmac_1802_native_terminal_pico/cdp1802.h
 
-      - name: Compile stand-alone native-terminal Pico UF2
+      - name: Compile audited native-terminal Pico UF2
         run: |
           mkdir -p build/cosmac_1802_native_terminal_pico
           arduino-cli compile \
@@ -72,14 +82,14 @@ jobs:
             cosmac_1802_native_terminal_pico
           UF2="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.uf2' | head -1)"
           test -n "$UF2"
-          cp "$UF2" build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO.uf2
+          cp "$UF2" build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_AUDITED.uf2
           find build/cosmac_1802_native_terminal_pico -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cosmac-1802-native-microforth-pico
+          name: cosmac-1802-native-microforth-v9-audited
           path: |
-            build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO.uf2
+            build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_AUDITED.uf2
             build/cosmac_1802_native_terminal_pico/*.elf
             build/cosmac_1802_native_terminal_pico/*.bin
           if-no-files-found: error
