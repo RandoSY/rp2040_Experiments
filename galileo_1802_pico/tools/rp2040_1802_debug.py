@@ -165,10 +165,12 @@ def smoke_test(mon: Monitor) -> None:
     address = 0x4200
     program = bytes([0xF8, 0x55, 0x7B, 0x7A, 0x00])  # LDI 55; SEQ; REQ; IDL
     original = mon.peek(address, len(program))
+    wrote_test_program = False
     try:
         lines = mon.send("@POKE 4200 " + " ".join(f"{b:02X}" for b in program))
         if any(line.startswith("@1802 ERR ") for line in lines):
             raise RuntimeError("POKE failed: " + " | ".join(lines))
+        wrote_test_program = True
         if mon.peek(address, len(program)) != program:
             raise RuntimeError("RAM readback did not match test program")
 
@@ -185,7 +187,10 @@ def smoke_test(mon: Monitor) -> None:
         assert s4["IDL"] == 1 and s4["PC"] == 0x4205
         print("RP2040 CDP1802 hardware smoke test: PASS")
     finally:
-        mon.send("@POKE 4200 " + " ".join(f"{b:02X}" for b in original))
+        if wrote_test_program:
+            restore = mon.send("@POKE 4200 " + " ".join(f"{b:02X}" for b in original))
+            if any(line.startswith("@1802 ERR ") for line in restore):
+                print("WARNING: could not restore RAM smoke-test bytes", file=sys.stderr)
         # Restore the normal Galileo boot path when images are installed.
         mon.send(".RESET")
 
