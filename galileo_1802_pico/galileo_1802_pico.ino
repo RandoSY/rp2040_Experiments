@@ -197,7 +197,7 @@ static void uploadLine(char *line){
 
 static void handleLine(char *line){
   while(*line==' '||*line=='\t')line++; if(!*line)return;
-  if(line[0]=='@'){flightRunning=false;handleCdp1802MonitorCommand(Serial,cpu,machine,line);return;}
+  if(line[0]=='@'&&line[1]&&line[1]!=' '&&line[1]!='\t'){flightRunning=false;handleCdp1802MonitorCommand(Serial,cpu,machine,line);return;}
   if(line[0]=='!'){uploadLine(line);return;}
   if(line[0]=='.'){handleMonitor(line);return;}
   char *tok=strtok(line," \t");while(tok){execForthToken(tok);tok=strtok(nullptr," \t");}Serial.println("OK");
