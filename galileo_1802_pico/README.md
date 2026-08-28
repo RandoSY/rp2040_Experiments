@@ -127,7 +127,7 @@ python3 tools/rp2040_1802_debug.py --port COM7 --step
 python3 tools/rp2040_1802_debug.py --port COM7 --smoke
 ```
 
-The hardware smoke test is deliberately reversible: it saves a few bytes in Galileo RAM at `$4200`, installs `LDI 55; SEQ; REQ; IDL`, verifies the expected D/Q/PC/IDL state after each step, restores the original RAM bytes, and finally returns through the normal Galileo reset path.
+The hardware smoke test is deliberately reversible: it saves a few bytes in the unprotected scratch-memory window at `$63F0`, installs `LDI 55; SEQ; REQ; IDL`, verifies the expected D/Q/PC/IDL state after each step, restores the original scratch bytes, and finally returns through the normal Galileo reset path.
 
 ## Validation
 
