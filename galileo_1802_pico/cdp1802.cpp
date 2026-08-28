@@ -32,6 +32,44 @@ void CDP1802::setEF(unsigned n, bool asserted) {
     if (n >= 1 && n <= 4) EF[n - 1] = asserted;
 }
 
+CDP1802State CDP1802::snapshot() const {
+    CDP1802State s{};
+    memcpy(s.R, R, sizeof(R));
+    s.D = D;
+    s.DF = DF;
+    s.P = P;
+    s.X = X;
+    s.T = T;
+    s.IE = IE;
+    s.Q = Q;
+    memcpy(s.EF, EF, sizeof(EF));
+    s.idle = idle;
+    s.halted = halted;
+    s.pendingInterrupt = pendingInterrupt;
+    s.undefinedOpcode = undefinedOpcode;
+    s.instructions = instructions;
+    s.machineCycles = machineCycles;
+    return s;
+}
+
+void CDP1802::restore(const CDP1802State &s) {
+    memcpy(R, s.R, sizeof(R));
+    D = s.D;
+    DF = s.DF ? 1 : 0;
+    P = s.P & 0x0f;
+    X = s.X & 0x0f;
+    T = s.T;
+    IE = s.IE ? 1 : 0;
+    memcpy(EF, s.EF, sizeof(EF));
+    idle = s.idle;
+    halted = s.halted;
+    pendingInterrupt = s.pendingInterrupt;
+    undefinedOpcode = s.undefinedOpcode;
+    instructions = s.instructions;
+    machineCycles = s.machineCycles;
+    setQ(s.Q != 0);
+}
+
 void CDP1802::setQ(bool value) {
     Q = value ? 1 : 0;
     bus_.qChanged(value);
