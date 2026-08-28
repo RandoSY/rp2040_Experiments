@@ -21,6 +21,27 @@ struct CDP1802Step {
     bool interrupt = false;
 };
 
+// Complete architecturally visible state plus emulator bookkeeping.
+// This is intentionally a plain data structure so host-side regression tools
+// can compare the RP2040 implementation with an independent 1802 model.
+struct CDP1802State {
+    uint16_t R[16]{};
+    uint8_t D = 0;
+    uint8_t DF = 0;
+    uint8_t P = 0;
+    uint8_t X = 0;
+    uint8_t T = 0;
+    uint8_t IE = 1;
+    uint8_t Q = 0;
+    bool EF[4]{};
+    bool idle = false;
+    bool halted = false;
+    bool pendingInterrupt = false;
+    uint8_t undefinedOpcode = 0;
+    uint64_t instructions = 0;
+    uint64_t machineCycles = 0;
+};
+
 class CDP1802 {
 public:
     explicit CDP1802(CDP1802Bus &bus);
@@ -51,6 +72,9 @@ public:
     void setEF(unsigned n, bool asserted);
     uint16_t pc() const { return R[P & 0x0f]; }
     void setPC(uint16_t value) { R[P & 0x0f] = value; }
+
+    CDP1802State snapshot() const;
+    void restore(const CDP1802State &state);
 
 private:
     CDP1802Bus &bus_;

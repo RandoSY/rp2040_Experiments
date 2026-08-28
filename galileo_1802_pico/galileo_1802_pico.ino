@@ -1,12 +1,31 @@
 #include <Arduino.h>
 #include "cdp1802.h"
+#include "cdp1802_serial_monitor.h"
 #include "galileo_machine.h"
 #include "galileo_flight.h"
 #include "galileo_storage.h"
 #include "crc32.h"
 #include "gy271_sensor.h"
 
-static GalileoMachine machine;
+class PicoGalileoMachine : public GalileoMachine {
+public:
+  void beginQIndicator(){
+    pinMode(LED_BUILTIN,OUTPUT);
+    qIndicatorReady_=true;
+    digitalWrite(LED_BUILTIN,qLevel_?HIGH:LOW);
+  }
+
+  void qChanged(bool q) override {
+    qLevel_=q;
+    if(qIndicatorReady_) digitalWrite(LED_BUILTIN,q?HIGH:LOW);
+  }
+
+private:
+  bool qIndicatorReady_=false;
+  bool qLevel_=false;
+};
+
+static PicoGalileoMachine machine;
 static CDP1802 cpu(machine);
 static GalileoFlightBridge flight(machine);
 static GalileoImageStore imageStore;
@@ -127,6 +146,7 @@ static void words(){
   for(size_t i=0;i<GALILEO_WORD_COUNT;i++){Serial.print(GALILEO_WORDS[i].name);Serial.print(' ');} Serial.println();
   Serial.println("MONITOR: .RUN .PAUSE .RESET .REGS .STATUS .STEP .BURN n .CMD fn val .ERASE");
   Serial.println("MAG: .MAGSCAN .MAGSTATUS .MAGRAW .MAGREAL .MAGSIM");
+  Serial.println("1802 DEBUG: @HELP @STATE @STEP @RESET @IRQ @SETPC @SET @EF @PEEK @POKE");
 }
 
 static void execForthToken(char *tok){
@@ -195,6 +215,7 @@ static void uploadLine(char *line){
 
 static void handleLine(char *line){
   while(*line==' '||*line=='\t')line++; if(!*line)return;
+  if(line[0]=='@'&&line[1]&&line[1]!=' '&&line[1]!='\t'){flightRunning=false;handleCdp1802MonitorCommand(Serial,cpu,machine,line);return;}
   if(line[0]=='!'){uploadLine(line);return;}
   if(line[0]=='.'){handleMonitor(line);return;}
   char *tok=strtok(line," \t");while(tok){execForthToken(tok);tok=strtok(nullptr," \t");}Serial.println("OK");
@@ -211,9 +232,11 @@ void loop1(){
 }
 
 void setup(){
+  machine.beginQIndicator();
   Serial.begin(115200); while(!Serial && millis()<5000) delay(10);
   Serial.println("GALILEO MAG / RP2040 CDP1802 emulator");
   Serial.println("1802 core: IE/RET/DIS/IDL/interrupt semantics enabled");
+  Serial.println("1802 Q output: onboard Pico LED follows Q (SEQ=ON, REQ=OFF)");
   Serial.println("GY-271 backend: GP4=SDA GP5=SCL, HMC5883L/QMC5883L autodetect on core 1");
   if(!imageStore.begin()){Serial.println("ERR LittleFS mount");return;}
   if(imageStore.haveRom()&&imageStore.haveRam())bootFlight();
