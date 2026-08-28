@@ -29,6 +29,15 @@ jobs:
             -o /tmp/test_core
           /tmp/test_core
 
+      - name: CDP1802 ISA regression
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            -Igalileo_1802_pico \
+            galileo_1802_pico/cdp1802.cpp \
+            galileo_1802_pico/tests/test_1802_regression.cpp \
+            -o /tmp/test_1802_regression
+          /tmp/test_1802_regression
+
       - name: Fetch preserved archive images for ephemeral regression only
         run: |
           mkdir -p /tmp/gll
