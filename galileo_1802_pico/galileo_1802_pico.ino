@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "cdp1802.h"
+#include "cdp1802_serial_monitor.h"
 #include "galileo_machine.h"
 #include "galileo_flight.h"
 #include "galileo_storage.h"
@@ -127,6 +128,7 @@ static void words(){
   for(size_t i=0;i<GALILEO_WORD_COUNT;i++){Serial.print(GALILEO_WORDS[i].name);Serial.print(' ');} Serial.println();
   Serial.println("MONITOR: .RUN .PAUSE .RESET .REGS .STATUS .STEP .BURN n .CMD fn val .ERASE");
   Serial.println("MAG: .MAGSCAN .MAGSTATUS .MAGRAW .MAGREAL .MAGSIM");
+  Serial.println("1802 DEBUG: @HELP @STATE @STEP @RESET @IRQ @SETPC @SET @EF @PEEK @POKE");
 }
 
 static void execForthToken(char *tok){
@@ -195,6 +197,7 @@ static void uploadLine(char *line){
 
 static void handleLine(char *line){
   while(*line==' '||*line=='\t')line++; if(!*line)return;
+  if(line[0]=='@'){flightRunning=false;handleCdp1802MonitorCommand(Serial,cpu,machine,line);return;}
   if(line[0]=='!'){uploadLine(line);return;}
   if(line[0]=='.'){handleMonitor(line);return;}
   char *tok=strtok(line," \t");while(tok){execForthToken(tok);tok=strtok(nullptr," \t");}Serial.println("OK");
