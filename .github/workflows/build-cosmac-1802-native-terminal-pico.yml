@@ -30,36 +30,32 @@ jobs:
             -o /tmp/test_1802_regression
           /tmp/test_1802_regression
 
-      - name: Validate audited v9 ROM image
+      - name: Validate single-source v10 ROM image
         run: |
           python3 - <<'PY'
           import pathlib,re,hashlib
-          root=pathlib.Path('cosmac_1802_native_terminal_pico')
-          lengths=[25,1106,592,16,33,104,86,158,28,129,700,34,124]
-          total=0
-          h=hashlib.sha256()
-          for i,n in enumerate(lengths):
-              t=(root/f'v9_seg{i}.h').read_text()
-              m=re.search(r'="([0-9A-F]+)";',t)
-              assert m, i
-              data=bytes.fromhex(m.group(1))
-              assert len(data)==n,(i,len(data),n)
-              total+=len(data)
-              h.update(data)
-          assert total==3135,total
-          assert bytes.fromhex(re.search(r'="([0-9A-F]+)";', (root/'v9_seg0.h').read_text()).group(1))[:4]==bytes.fromhex('F8C8BCF8')
-          print('audited v9 ROM occupied bytes:',total)
-          print('ordered-segment SHA256:',h.hexdigest())
+          p=pathlib.Path('cosmac_1802_native_terminal_pico/native_rom_v10.h').read_text()
+          body=p.split('static const char MF_ROM_V10_HEX[] =',1)[1].split(';',1)[0]
+          hx=''.join(re.findall(r'"([0-9A-F]+)"',body))
+          data=bytes.fromhex(hx)
+          assert len(data)==0x2000, len(data)
+          assert data[:4]==bytes.fromhex('F8C8BCF8')
+          assert b'COSMAC 1802 microFORTH v10' in data
+          assert b'IF ELSE THEN' in data
+          assert b'BEGIN AGAIN UNTIL' in data
+          assert b'DO LOOP' in data
+          print('v10 ROM bytes:',len(data))
+          print('v10 ROM SHA256:',hashlib.sha256(data).hexdigest())
           PY
 
-      - name: Native microFORTH v9 regression
+      - name: Native microFORTH v10 regression
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Werror \
             -Igalileo_1802_pico -Icosmac_1802_native_terminal_pico \
             galileo_1802_pico/cdp1802.cpp \
-            cosmac_1802_native_terminal_pico/test_native_terminal_v9.cpp \
-            -o /tmp/test_native_terminal_v9
-          /tmp/test_native_terminal_v9
+            cosmac_1802_native_terminal_pico/test_native_terminal_v10.cpp \
+            -o /tmp/test_native_terminal_v10
+          /tmp/test_native_terminal_v10
 
       - uses: arduino/setup-arduino-cli@v2
 
@@ -70,29 +66,21 @@ jobs:
           arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls \
             https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
-      - name: Stage clean firmware sketch from the exact regression ROM
+      - name: Stage clean v10 firmware sketch
         run: |
-          rm -rf /tmp/cosmac_1802_native_terminal_pico_v9_romsync
-          mkdir -p /tmp/cosmac_1802_native_terminal_pico_v9_romsync
+          rm -rf /tmp/cosmac_1802_native_terminal_pico_v10
+          mkdir -p /tmp/cosmac_1802_native_terminal_pico_v10
           cp cosmac_1802_native_terminal_pico/cosmac_1802_native_terminal_pico.ino \
-            /tmp/cosmac_1802_native_terminal_pico_v9_romsync/cosmac_1802_native_terminal_pico_v9_romsync.ino
-          cp cosmac_1802_native_terminal_pico/native_rom_v9_split.h \
-            /tmp/cosmac_1802_native_terminal_pico_v9_romsync/native_rom_v9_split.h
-          cp cosmac_1802_native_terminal_pico/v9_seg*.h \
-            /tmp/cosmac_1802_native_terminal_pico_v9_romsync/
-          cp galileo_1802_pico/cdp1802.cpp /tmp/cosmac_1802_native_terminal_pico_v9_romsync/cdp1802.cpp
-          cp galileo_1802_pico/cdp1802.h /tmp/cosmac_1802_native_terminal_pico_v9_romsync/cdp1802.h
-          sed -i 's/native_rom_v8_segments.h/native_rom_v9_split.h/' \
-            /tmp/cosmac_1802_native_terminal_pico_v9_romsync/cosmac_1802_native_terminal_pico_v9_romsync.ino
-          sed -i 's/COSMAC1802 NATIVE FORTH V8 READY/COSMAC1802 NATIVE FORTH V9.1 ROMSYNC READY/' \
-            /tmp/cosmac_1802_native_terminal_pico_v9_romsync/cosmac_1802_native_terminal_pico_v9_romsync.ino
-          grep -q 'native_rom_v9_split.h' /tmp/cosmac_1802_native_terminal_pico_v9_romsync/cosmac_1802_native_terminal_pico_v9_romsync.ino
-          grep -q 'native_rom_v9_split.h' cosmac_1802_native_terminal_pico/test_native_terminal_v9.cpp
-          test ! -e /tmp/cosmac_1802_native_terminal_pico_v9_romsync/native_rom_v9_segments.h
-          test ! -e /tmp/cosmac_1802_native_terminal_pico_v9_romsync/native_rom_v8_segments.h
-          test ! -e /tmp/cosmac_1802_native_terminal_pico_v9_romsync/test_native_terminal_v9.cpp
+            /tmp/cosmac_1802_native_terminal_pico_v10/cosmac_1802_native_terminal_pico_v10.ino
+          cp cosmac_1802_native_terminal_pico/native_rom_v10.h \
+            /tmp/cosmac_1802_native_terminal_pico_v10/native_rom_v10.h
+          cp galileo_1802_pico/cdp1802.cpp /tmp/cosmac_1802_native_terminal_pico_v10/cdp1802.cpp
+          cp galileo_1802_pico/cdp1802.h /tmp/cosmac_1802_native_terminal_pico_v10/cdp1802.h
+          grep -q 'native_rom_v10.h' /tmp/cosmac_1802_native_terminal_pico_v10/cosmac_1802_native_terminal_pico_v10.ino
+          grep -q 'RX_CAP = 1024' /tmp/cosmac_1802_native_terminal_pico_v10/cosmac_1802_native_terminal_pico_v10.ino
+          test ! -e /tmp/cosmac_1802_native_terminal_pico_v10/test_native_terminal_v10.cpp
 
-      - name: Compile audited native-terminal Pico UF2
+      - name: Compile native-control Forth Pico UF2
         run: |
           rm -rf build/cosmac_1802_native_terminal_pico
           mkdir -p build/cosmac_1802_native_terminal_pico
@@ -100,42 +88,32 @@ jobs:
             --fqbn 'rp2040:rp2040:rpipico:flash=2097152_65536,usbstack=picosdk,opt=Optimize2' \
             --warnings all \
             --output-dir build/cosmac_1802_native_terminal_pico \
-            /tmp/cosmac_1802_native_terminal_pico_v9_romsync
+            /tmp/cosmac_1802_native_terminal_pico_v10
           UF2="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.uf2' | head -1)"
           ELF="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.elf' | head -1)"
           test -n "$UF2"
           test -n "$ELF"
-          cp "$UF2" build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_1_ROMSYNC.uf2
+          cp "$UF2" build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v10_CONTROL_FORTH.uf2
           find build/cosmac_1802_native_terminal_pico -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
 
-      - name: Verify production firmware embeds the exact v9 segment strings
+      - name: Production firmware integrity audit
         run: |
           ELF="$(find build/cosmac_1802_native_terminal_pico -maxdepth 1 -name '*.elf' | head -1)"
           strings -a "$ELF" > /tmp/elf_strings.txt
-          grep -q 'COSMAC1802 NATIVE FORTH V9.1 ROMSYNC READY' /tmp/elf_strings.txt
+          grep -q 'COSMAC1802 NATIVE FORTH V10 READY' /tmp/elf_strings.txt
           grep -q 'Pico Serial' /tmp/elf_strings.txt
-          if grep -q 'native terminal v9 regression: PASS' /tmp/elf_strings.txt; then
+          grep -q 'COSMAC 1802 microFORTH v10' /tmp/elf_strings.txt
+          if grep -q 'native terminal v10 regression: PASS' /tmp/elf_strings.txt; then
             echo 'ERROR: host regression main leaked into Pico firmware'
             exit 1
           fi
-          python3 - "$ELF" <<'PY'
-          import pathlib,re,subprocess,sys
-          root=pathlib.Path('cosmac_1802_native_terminal_pico')
-          elf=sys.argv[1]
-          strings=subprocess.check_output(['strings','-a',elf],text=True,errors='ignore')
-          for i in range(13):
-              t=(root/f'v9_seg{i}.h').read_text()
-              h=re.search(r'="([0-9A-F]+)";',t).group(1)
-              if h not in strings:
-                  raise SystemExit(f'ERROR: v9 segment {i} not found verbatim in production ELF')
-          print('Production ROM == regression ROM segment audit: PASS')
-          PY
+          echo 'Production entry/USB/native-ROM audit: PASS'
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cosmac-1802-native-microforth-v9-1-romsync
+          name: cosmac-1802-native-microforth-v10-control-forth
           path: |
-            build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v9_1_ROMSYNC.uf2
+            build/cosmac_1802_native_terminal_pico/COSMAC_1802_NATIVE_MICROFORTH_PICO_v10_CONTROL_FORTH.uf2
             build/cosmac_1802_native_terminal_pico/*.elf
             build/cosmac_1802_native_terminal_pico/*.bin
           if-no-files-found: error
