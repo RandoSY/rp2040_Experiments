@@ -5,7 +5,7 @@
 #include <deque>
 #include <string>
 #include "cdp1802.h"
-#include "native_rom_v10.h"
+#include "native_rom_v10_split.h"
 
 class TestBus : public CDP1802Bus {
 public:
