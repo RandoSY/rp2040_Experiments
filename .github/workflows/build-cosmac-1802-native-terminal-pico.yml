@@ -30,22 +30,30 @@ jobs:
             -o /tmp/test_1802_regression
           /tmp/test_1802_regression
 
-      - name: Validate single-source v10 ROM image
+      - name: Validate split single-source v10 ROM image
         run: |
           python3 - <<'PY'
           import pathlib,re,hashlib
-          p=pathlib.Path('cosmac_1802_native_terminal_pico/native_rom_v10.h').read_text()
-          body=p.split('static const char MF_ROM_V10_HEX[] =',1)[1].split(';',1)[0]
-          hx=''.join(re.findall(r'"([0-9A-F]+)"',body))
-          data=bytes.fromhex(hx)
-          assert len(data)==0x2000, len(data)
+          root=pathlib.Path('cosmac_1802_native_terminal_pico')
+          image=bytearray()
+          for i in range(16):
+              t=(root/f'v10_seg{i:02d}.h').read_text()
+              m=re.search(r'="([0-9A-F]+)";',t)
+              assert m, i
+              data=bytes.fromhex(m.group(1))
+              assert len(data)==512,(i,len(data))
+              image.extend(data)
+          data=bytes(image)
+          digest=hashlib.sha256(data).hexdigest()
+          assert len(data)==0x2000,len(data)
+          assert digest=='6480cf7f8d20533d35b1834ee64a895fba7a85e8a6d2fc3ff761828d2942210f',digest
           assert data[:4]==bytes.fromhex('F8C8BCF8')
           assert b'COSMAC 1802 microFORTH v10' in data
           assert b'IF ELSE THEN' in data
           assert b'BEGIN AGAIN UNTIL' in data
           assert b'DO LOOP' in data
           print('v10 ROM bytes:',len(data))
-          print('v10 ROM SHA256:',hashlib.sha256(data).hexdigest())
+          print('v10 ROM SHA256:',digest)
           PY
 
       - name: Native microFORTH v10 regression
@@ -66,7 +74,7 @@ jobs:
           arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls \
             https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
-      - name: Stage clean v10 firmware sketch
+      - name: Stage clean v10 firmware sketch from exact regression ROM
         run: |
           rm -rf /tmp/cosmac_1802_native_terminal_pico_v10
           mkdir -p /tmp/cosmac_1802_native_terminal_pico_v10
@@ -74,10 +82,15 @@ jobs:
             /tmp/cosmac_1802_native_terminal_pico_v10/cosmac_1802_native_terminal_pico_v10.ino
           cp cosmac_1802_native_terminal_pico/native_rom_v10.h \
             /tmp/cosmac_1802_native_terminal_pico_v10/native_rom_v10.h
+          cp cosmac_1802_native_terminal_pico/native_rom_v10_split.h \
+            /tmp/cosmac_1802_native_terminal_pico_v10/native_rom_v10_split.h
+          cp cosmac_1802_native_terminal_pico/v10_seg*.h \
+            /tmp/cosmac_1802_native_terminal_pico_v10/
           cp galileo_1802_pico/cdp1802.cpp /tmp/cosmac_1802_native_terminal_pico_v10/cdp1802.cpp
           cp galileo_1802_pico/cdp1802.h /tmp/cosmac_1802_native_terminal_pico_v10/cdp1802.h
           grep -q 'native_rom_v10.h' /tmp/cosmac_1802_native_terminal_pico_v10/cosmac_1802_native_terminal_pico_v10.ino
           grep -q 'RX_CAP = 1024' /tmp/cosmac_1802_native_terminal_pico_v10/cosmac_1802_native_terminal_pico_v10.ino
+          grep -q 'native_rom_v10_split.h' /tmp/cosmac_1802_native_terminal_pico_v10/native_rom_v10.h
           test ! -e /tmp/cosmac_1802_native_terminal_pico_v10/test_native_terminal_v10.cpp
 
       - name: Compile native-control Forth Pico UF2
