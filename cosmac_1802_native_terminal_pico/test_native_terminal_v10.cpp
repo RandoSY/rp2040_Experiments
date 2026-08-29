@@ -81,16 +81,12 @@ static void contains(const std::string &s, const char *needle) {
 int main() {
   TestBus bus; CDP1802 cpu(bus); bus.attach(&cpu); bus.install(); cpu.hardReset(); cpu.setPC(MF_COLD);
 
-  // Allow COLD to reach its terminal wait state.  If this reconstructed ROM
-  // requires the first CR before presenting OK, exercise that path explicitly
-  // rather than mistaking the intentional EF4 wait at CC47 for a hang.
-  for (unsigned i=0; i<200000 && bus.tx.empty(); ++i) { cpu.step(); assert(!cpu.halted); }
+  // COLD intentionally settles at the native EF4 input wait (CC47).  No host
+  // prompt is manufactured here: the first real Forth line must wake the 1802,
+  // execute through the native interpreter, and produce its own OK through OUT 7.
+  for (unsigned i=0; i<200000 && cpu.pc()!=0xCC47; ++i) { cpu.step(); assert(!cpu.halted); }
   fprintf(stderr,"boot checkpoint PC=%04X output=[%s]\n", cpu.pc(), bus.tx.c_str());
-  if (!endsWith(bus.tx,"OK\r\n")) {
-    bus.enqueue("\r");
-    runUntilPrompt(cpu,bus,300000);
-  }
-  contains(bus.tx,"OK\r\n");
+  assert(cpu.pc()==0xCC47);
 
   contains(cmd(cpu,bus,"2 2 + ."),"4 OK\r\n");
   contains(cmd(cpu,bus,"3 1 AND ."),"1 OK\r\n");
